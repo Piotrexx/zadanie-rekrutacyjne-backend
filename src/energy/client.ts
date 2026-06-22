@@ -8,7 +8,7 @@ async function fetchEnergyMixData(from:string, to:string) : Promise<Array<Interv
 
 export async function getThreeDaysData(date: Date) : Promise<Array<IntervalStatistic>> {
   const from = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-  from.setUTCMinutes(from.getUTCMinutes() + 1);
+  from.setUTCSeconds(1);
   const to = new Date(from);
   to.setUTCDate(to.getUTCDate() + 3);
   to.setUTCHours(0, 0, 0, 0);
@@ -16,10 +16,8 @@ export async function getThreeDaysData(date: Date) : Promise<Array<IntervalStati
 }
 
 export async function getTwoDaysData() {
-  const from = new Date()
-  const to = new Date(from)
-  to.setDate(from.getDate() + 2)
-
-  return await fetchEnergyMixData(from.toISOString(), to.toISOString())
+  const from = new Date();
+  const to = new Date(from.getTime() + 2 * 24 * 60 * 60 * 1000);
+  return await fetchEnergyMixData(from.toISOString(), to.toISOString());
 }
 
