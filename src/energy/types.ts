@@ -1,4 +1,4 @@
-export const CLEAN_ENERGY_SOURCES = ["biomass", "nuclear", "hydro", "wind", "solar"]
+export const CLEAN_ENERGY_SOURCES = new Set<string>(["biomass", "nuclear", "hydro", "wind", "solar"])
 
 export type EnergyTypePercentage = {
     [energyType: string]: number

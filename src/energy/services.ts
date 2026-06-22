@@ -6,62 +6,82 @@ import {
   OptimalChargingType,
 } from "./types";
 
+const round = (n: number) => Math.round((n + Number.EPSILON) * 10) / 10;
+
 export function calculateAverageEachDay(
   daysData: Record<string, IntervalStatistic[]>,
 ): EnergyMixType {
+
   const totalStatistics: Record<string, { sum: number; count: number }> = {};
-  const averageCleanEnergy: { sum: number; count: number } = {
-    sum: 0,
-    count: 0,
-  };
+
+  let allIntervalsCleanEnergySum = 0;
+  let allIntervalsCount = 0;
+
   const averageDaysStatistic = Object.entries(daysData).map(
     ([date, intervals]) => {
-      const totals: Record<string, { sum: number; count: number }> = {};
+      const dayStatistics: Record<string, { sum: number; count: number }> = {};
+
+      let dayCleanEnergySum = 0;
 
       for (const interval of intervals) {
+        let intervalCleanEnergy = 0;
+
         for (const item of interval.generationmix) {
-          const fuel = (item as any).fuel;
-          const perc = (item as any).perc as number;
-          if (!totals[fuel]) totals[fuel] = { sum: 0, count: 0 };
-          if (!totalStatistics[fuel])
+          const fuel = item.fuel;
+          const perc = item.perc;
+
+          if (!dayStatistics[fuel]) {
+            dayStatistics[fuel] = { sum: 0, count: 0 };
+          }
+
+          if (!totalStatistics[fuel]) {
             totalStatistics[fuel] = { sum: 0, count: 0 };
-          totals[fuel].sum += perc;
-          totals[fuel].count++;
+          }
+
+          dayStatistics[fuel].sum += perc;
+          dayStatistics[fuel].count++;
+
           totalStatistics[fuel].sum += perc;
           totalStatistics[fuel].count++;
+
+          if (CLEAN_ENERGY_SOURCES.has(String(fuel))) {
+            intervalCleanEnergy += perc;
+          }
         }
+
+        dayCleanEnergySum += intervalCleanEnergy;
+
+        allIntervalsCleanEnergySum += intervalCleanEnergy;
+        allIntervalsCount++;
       }
 
       const avgMix: Record<string, number> = {};
-      let cleanEnergyTotal = 0;
 
-      for (const [fuel, { sum, count }] of Object.entries(totals)) {
-        const avg = Math.round(sum / count);
-        avgMix[fuel] = avg;
-        if (CLEAN_ENERGY_SOURCES.includes(fuel)) {
-          averageCleanEnergy.count += 1;
-          cleanEnergyTotal += avg;
-        }
+      for (const [fuel, { sum, count }] of Object.entries(dayStatistics)) {
+        avgMix[fuel] = round(sum / count);
       }
-      averageCleanEnergy.sum += cleanEnergyTotal;
 
       return {
         date,
         energyTypes: [avgMix],
-        cleanEnergyPercent: cleanEnergyTotal,
+        cleanEnergyPercent:
+          intervals.length > 0
+            ? round(dayCleanEnergySum / intervals.length)
+            : 0,
       };
     },
   );
 
   return {
     days: averageDaysStatistic,
-    cleanEnergyPercent: Math.round(
-      averageCleanEnergy.sum / averageCleanEnergy.count,
-    ),
+    cleanEnergyPercent:
+      allIntervalsCount > 0
+        ? round(allIntervalsCleanEnergySum / allIntervalsCount)
+        : 0,
     averageEnergyTypePercentage: Object.entries(totalStatistics).map(
-      ([fuel, data]) => {
+      ([fuel, { sum, count }]) => {
         return {
-          [fuel]: Math.round(data.sum / data.count),
+          [fuel]: round(sum / count),
         };
       },
     ),
@@ -73,30 +93,30 @@ export async function calculateEnergyMix(): Promise<EnergyMixType> {
 
   const grouped: Record<string, typeof data> = {};
   for (const entry of data) {
-    const dateKey = new Date(entry.from).toISOString().split("T")[0];
+    const dateKey = entry.from.slice(0, 10);
     if (!grouped[dateKey]) grouped[dateKey] = [];
     grouped[dateKey].push(entry);
   }
 
-  return await calculateAverageEachDay(grouped);
+  return calculateAverageEachDay(grouped);
 }
 
 export function calculateOptimalChargingTime(
   hours: number,
-  dayData: IntervalStatistic[],
+  forecastIntervals: IntervalStatistic[],
 ): OptimalChargingType {
   const intervalsPerWindow = hours * 2;
   let bestStartIndex = 0;
   let bestAvg = 0;
 
-  for (let i = 0; i <= dayData.length - intervalsPerWindow; i++) {
+  for (let i = 0; i <= forecastIntervals.length - intervalsPerWindow; i++) {
     let cleanSum = 0;
 
     for (let j = i; j < i + intervalsPerWindow; j++) {
-      for (const item of dayData[j].generationmix) {
+      for (const item of forecastIntervals[j].generationmix) {
         const fuel = (item as any).fuel;
         const perc = (item as any).perc as number;
-        if (CLEAN_ENERGY_SOURCES.includes(fuel)) {
+        if (CLEAN_ENERGY_SOURCES.has(fuel)) {
           cleanSum += perc;
         }
       }
@@ -110,8 +130,8 @@ export function calculateOptimalChargingTime(
   }
 
   return {
-    from: dayData[bestStartIndex].from,
-    to: dayData[bestStartIndex + intervalsPerWindow - 1].to,
-    cleanEnergyPercent: Math.round(bestAvg),
+    from: forecastIntervals[bestStartIndex].from,
+    to: forecastIntervals[bestStartIndex + intervalsPerWindow - 1].to,
+    cleanEnergyPercent: round(bestAvg),
   };
 }
